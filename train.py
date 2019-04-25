@@ -37,7 +37,7 @@ def default_loader(path):
 
 # flag for whether you're training or not
 is_train = True
-is_key_frame = False # TODO: set this to false to train on the video frames, instead of the key frames
+is_key_frame = True # TODO: set this to false to train on the video frames, instead of the key frames
 model_to_load = 'model.ckpt' # This is the model to load during testing, if you want to eval a previously-trained model.
 
 # CUDA for PyTorch
@@ -46,13 +46,13 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 #cudnn.benchmark = True
 
 # Parameters for data loader
-params = {'batch_size': 128,  # TODO: fill in the batch size. often, these are things like 32,64,128,or 256
+params = {'batch_size': 64,  # TODO: fill in the batch size. often, these are things like 32,64,128,or 256
           'shuffle': True,
           'num_workers': 2
           }
 # TODO: Hyper-parameters
-num_epochs = 20
-learning_rate = 7e-5
+num_epochs = 40
+learning_rate = 5e-4
 # NOTE: depending on your optimizer, you may want to tune other hyperparameters as well
 
 # Datasets
@@ -84,6 +84,8 @@ std = [23.5033438916 / 255, 23.8827343458 / 255, 24.5498666589 / 255]
 train_dataset = Mds189(label_file_train,loader=default_loader,transform=transforms.Compose([
                                                # transforms.Pad(requires_parameters),    # TODO: if you want to pad your images
                                                # transforms.Resize(requires_parameters), # TODO: if you want to resize your images
+#                                               transforms.RandomCrop((300, 224)),
+                                               transforms.RandomRotation(15),
                                                transforms.ToTensor(),
                                                transforms.Normalize(mean, std)
                                            ]))
@@ -92,6 +94,8 @@ train_loader = data.DataLoader(train_dataset, **params)
 val_dataset = Mds189(label_file_val,loader=default_loader,transform=transforms.Compose([
                                                # transforms.Pad(),
                                                # transforms.Resize(),
+#                                               transforms.RandomCrop((300, 224)),
+                                               transforms.RandomRotation(15),
                                                transforms.ToTensor(),
                                                transforms.Normalize(mean, std)
                                            ]))
@@ -101,6 +105,8 @@ if not is_key_frame:
     test_dataset = Mds189(label_file_test,loader=default_loader,transform=transforms.Compose([
                                                    # transforms.Pad(),
                                                    # transforms.Resize(),
+#                                                   transforms.RandomCrop((300, 224)),
+                                                   transforms.RandomRotation(15),
                                                    transforms.ToTensor(),
                                                    transforms.Normalize(mean, std)
                                                ]))
@@ -139,7 +145,7 @@ class NeuralNetTest(nn.Module):
         x = F.relu(self.fc1(x)) # x -> fc (affine) layer -> relu
         return x
 
-class NeuralNet1(nn.Module):
+class NeuralNet0(nn.Module):
     def __init__(self):
         super(NeuralNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
@@ -162,7 +168,7 @@ class NeuralNet1(nn.Module):
         x = self.fc3(x)
         return x
 
-class NeuralNet(nn.Module):
+class NeuralNet1(nn.Module):
     def __init__(self):
         super(NeuralNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 12, 5, stride = 2)
@@ -205,6 +211,37 @@ class NeuralNet(nn.Module):
         self.fc1 = nn.Linear(192 * 4 * 1, 400)
         self.fc2 = nn.Linear(400, 200)
         self.fc3 = nn.Linear(200, 8)
+        self.dropout = nn.Dropout()
+
+    def forward(self, x):
+        x = self.pool(F.relu(self.conv1(x))) # x -> convolution -> ReLU -> max pooling
+        x = self.pool(F.relu(self.conv2(x)))
+        x = self.pool(F.relu(self.conv3(x)))
+        x = self.pool(F.relu(self.conv4(x)))
+#        x = self.pool(F.relu(self.conv5(x)))
+#        x = nn.AdaptiveAvgPool2d((6,6))(x)
+#        print(x.shape)
+        num_feat = np.prod(x.shape[1:])
+        x = x.view(-1, num_feat)
+        x = F.relu(self.fc1(x))
+        x = self.dropout(x)
+        x = F.relu(self.fc2(x))
+        x = self.dropout(x)
+        x = self.fc3(x)
+        return x
+
+class NeuralNet3(nn.Module):
+    def __init__(self):
+        super(NeuralNet, self).__init__()
+        self.conv1 = nn.Conv2d(3, 48, 9, 4)
+        self.conv2 = nn.Conv2d(48, 128, 5)
+        self.conv3 = nn.Conv2d(128, 192, 3, 1)
+        self.conv4 = nn.Conv2d(192, 192, 3, 1)
+#        self.conv5 = nn.Conv2d(256, 256, 3, 1)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.fc1 = nn.Linear(192 * 2 * 1, 200)
+        self.fc2 = nn.Linear(200, 40)
+        self.fc3 = nn.Linear(40, 8)
         self.dropout = nn.Dropout()
 
     def forward(self, x):
@@ -317,9 +354,12 @@ with torch.no_grad():
 # convert the predicted_list and groundtruth_list Tensors to lists
 pl = [p.cpu().numpy().tolist() for p in predicted_list]
 gt = [p.cpu().numpy().tolist() for p in groundtruth_list]
-
-np.save("preds_d", pl)
-np.save("true_labels_d", gt)
+if is_key_frame:
+    np.save("preds_b", pl)
+    np.save("true_labels_b", gt)
+else:
+    np.save("preds_d", pl)
+    np.save("true_labels_d", gt)
 
 # TODO: use pl and gt to produce your confusion matrices
 
@@ -351,8 +391,12 @@ if not is_key_frame:
             _, pred2 = torch.max(pred.data, 1)
             preds.extend(list(pred2.cpu().numpy()))
         results_to_csv(np.array(preds))
+if is_key_frame:
+    np.save("train_loss_b", loss_list)
+    np.save("val_loss_b", val_loss_list)
+else:
+    np.save("train_loss_d", loss_list)
+    np.save("val_loss_d", val_loss_list)
 
-np.save("train_loss_d", loss_list)
-np.save("val_loss_d", val_loss_list)
 # Save the model checkpoint
 torch.save(model.state_dict(), 'model_d.ckpt')
