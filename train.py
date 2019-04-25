@@ -37,7 +37,7 @@ def default_loader(path):
 
 # flag for whether you're training or not
 is_train = True
-is_key_frame = True # TODO: set this to false to train on the video frames, instead of the key frames
+is_key_frame = False # TODO: set this to false to train on the video frames, instead of the key frames
 model_to_load = 'model.ckpt' # This is the model to load during testing, if you want to eval a previously-trained model.
 
 # CUDA for PyTorch
@@ -51,8 +51,8 @@ params = {'batch_size': 128,  # TODO: fill in the batch size. often, these are t
           'num_workers': 2
           }
 # TODO: Hyper-parameters
-num_epochs = 40
-learning_rate = 7e-4
+num_epochs = 20
+learning_rate = 7e-5
 # NOTE: depending on your optimizer, you may want to tune other hyperparameters as well
 
 # Datasets
@@ -299,7 +299,8 @@ with torch.no_grad():
     total = 0
     predicted_list = []
     groundtruth_list = []
-    for (local_batch,local_labels) in test_loader:
+    for (local_batch,local_labels) in val_loader:
+#    for (local_batch,local_labels) in test_loader:
         # Transfer to GPU
         local_ims, local_labels = local_batch.to(device), local_labels.to(device)
 
@@ -317,8 +318,8 @@ with torch.no_grad():
 pl = [p.cpu().numpy().tolist() for p in predicted_list]
 gt = [p.cpu().numpy().tolist() for p in groundtruth_list]
 
-np.save("preds_b", pl)
-np.save("true_labels_b", gt)
+np.save("preds_d", pl)
+np.save("true_labels_d", gt)
 
 # TODO: use pl and gt to produce your confusion matrices
 
@@ -328,6 +329,7 @@ for id in range(len(label_map)):
     print('{}: {}'.format(label_map[id],sum([p and g for (p,g) in zip(np.array(pl)==np.array(gt),np.array(gt)==id)])/(sum(np.array(gt)==id)+0.)))
 
 # TODO: you'll need to run the forward pass on the kaggle competition images, and save those results to a csv file.
+import pandas as pd
 
 if not is_key_frame:
     # your code goes here!
@@ -336,8 +338,8 @@ if not is_key_frame:
         y_test = [label_map[i] for i in y_test]
         df = pd.DataFrame({'Category': y_test})
         def img_lab(label):
-            return str(x).zfill(4) + ".jpg"
-        df.index = df.index.map(label)
+            return str(label).zfill(4) + ".jpg"
+        df.index = df.index.map(img_lab)
         df.to_csv(name, index_label='Id')
 
     with torch.no_grad():
@@ -350,7 +352,7 @@ if not is_key_frame:
             preds.extend(list(pred2.cpu().numpy()))
         results_to_csv(np.array(preds))
 
-np.save("train_loss_b", loss_list)
-np.save("val_loss_b", val_loss_list)
+np.save("train_loss_d", loss_list)
+np.save("val_loss_d", val_loss_list)
 # Save the model checkpoint
-torch.save(model.state_dict(), 'model_b.ckpt')
+torch.save(model.state_dict(), 'model_d.ckpt')
