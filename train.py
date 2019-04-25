@@ -37,7 +37,7 @@ def default_loader(path):
 
 # flag for whether you're training or not
 is_train = True
-is_key_frame = True # TODO: set this to false to train on the video frames, instead of the key frames
+is_key_frame = False # TODO: set this to false to train on the video frames, instead of the key frames
 model_to_load = 'model.ckpt' # This is the model to load during testing, if you want to eval a previously-trained model.
 
 # CUDA for PyTorch
@@ -51,8 +51,8 @@ params = {'batch_size': 64,  # TODO: fill in the batch size. often, these are th
           'num_workers': 2
           }
 # TODO: Hyper-parameters
-num_epochs = 40
-learning_rate = 5e-4
+num_epochs = 10
+learning_rate = 1e-4
 # NOTE: depending on your optimizer, you may want to tune other hyperparameters as well
 
 # Datasets
@@ -266,7 +266,7 @@ model = NeuralNet().to(device)
 # if we're only testing, we don't want to train for any epochs, and we want to load a model
 if not is_train:
     num_epochs = 0
-    model.load_state_dict(torch.load('model.ckpt'))
+    model.load_state_dict(torch.load('model_d.ckpt'))
 
 # Loss and optimizer
 criterion =  nn.CrossEntropyLoss() #TODO: define your loss here. hint: should just require calling a built-in pytorch layer.
@@ -354,10 +354,10 @@ with torch.no_grad():
 # convert the predicted_list and groundtruth_list Tensors to lists
 pl = [p.cpu().numpy().tolist() for p in predicted_list]
 gt = [p.cpu().numpy().tolist() for p in groundtruth_list]
-if is_key_frame:
+if is_key_frame and is_train:
     np.save("preds_b", pl)
     np.save("true_labels_b", gt)
-else:
+if (not is_key_frame) and is_train:
     np.save("preds_d", pl)
     np.save("true_labels_d", gt)
 
@@ -391,12 +391,16 @@ if not is_key_frame:
             _, pred2 = torch.max(pred.data, 1)
             preds.extend(list(pred2.cpu().numpy()))
         results_to_csv(np.array(preds))
-if is_key_frame:
+if is_key_frame and is_train:
     np.save("train_loss_b", loss_list)
     np.save("val_loss_b", val_loss_list)
-else:
+if (not is_key_frame) and is_train:
     np.save("train_loss_d", loss_list)
     np.save("val_loss_d", val_loss_list)
 
 # Save the model checkpoint
-torch.save(model.state_dict(), 'model_d.ckpt')
+if is_key_frame:
+    torch.save(model.state_dict(), 'model_b.ckpt')
+else:
+    torch.save(model.state_dict(), 'model_d.ckpt')
+
